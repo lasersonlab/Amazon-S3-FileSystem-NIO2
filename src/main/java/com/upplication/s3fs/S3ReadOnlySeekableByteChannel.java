@@ -2,6 +2,7 @@ package com.upplication.s3fs;
 
 import com.amazonaws.services.s3.model.GetObjectRequest;
 import com.amazonaws.services.s3.model.S3Object;
+import com.amazonaws.services.s3.model.S3ObjectInputStream;
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -27,7 +28,7 @@ public class S3ReadOnlySeekableByteChannel implements SeekableByteChannel {
     private S3Path path;
     private Set<? extends OpenOption> options;
     private long length;
-    private ExtBufferedInputStream bufferedStream;
+    private ExtBufferedInputStream bufferedStream = null;
     private ReadableByteChannel rbc;
     private long position = 0;
 
@@ -72,6 +73,9 @@ public class S3ReadOnlySeekableByteChannel implements SeekableByteChannel {
     }
 
     private void openStreamAt(long position) throws IOException {
+        if (bufferedStream != null) {
+            bufferedStream.getObjectStream().abort();
+        }
         if (rbc != null) {
             rbc.close();
         }
@@ -143,18 +147,28 @@ public class S3ReadOnlySeekableByteChannel implements SeekableByteChannel {
     }
 
     public void close() throws IOException {
+        if (bufferedStream != null) {
+            bufferedStream.getObjectStream().abort();
+        }
         rbc.close();
     }
 
     private class ExtBufferedInputStream extends BufferedInputStream {
-        private ExtBufferedInputStream(final InputStream inputStream, final int size) {
-            super(inputStream, size);
+        S3ObjectInputStream objectStream;
+
+        private ExtBufferedInputStream(final S3ObjectInputStream objectStream, final int size) {
+            super(objectStream, size);
+
+            this.objectStream = objectStream;
+        }
+
+        private S3ObjectInputStream getObjectStream() {
+            return this.objectStream ;
         }
 
         /** Returns the number of bytes that can be read from the buffer without reading more into the buffer. */
         int getBytesInBufferAvailable() {
-            if (this.count == this.pos) return 0;
-            else return this.buf.length - this.pos;
+            return (this.count - this.pos);
         }
     }
 }
